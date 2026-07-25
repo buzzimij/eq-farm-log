@@ -1,6 +1,6 @@
 import os, re
 LOGDIR = r"C:/Users/Public/Daybreak Game Company/Installed Games/EverQuest/Logs"
-OUT = r"C:/Users/Dercius/Desktop/EQFarmLog/farm_log.html"
+OUT = r"C:/Users/Dercius/Desktop/EQFarmLog/index.html"
 DAYS = [("22", "Jul 22"), ("23", "Jul 23"), ("24", "Jul 24")]
 TOONS = ["Zedus", "Dercius", "Emia", "Hoggly"]
 GROUP = set(["Zedus", "Dercius", "Emia", "Hoggly", "Thrice", "Loriex", "Hogga", "Discover", "Froggy"])
@@ -253,3 +253,16 @@ print("wrote", OUT, "(%d bytes)" % len(html))
 for lbl, d in data:
     print("  %s: kills=%d frog=%d hrs=%.1f plat=%.0f ods=%d" % (
         lbl, d["kills"], d["frok"], d["hours"], d["coin"] + d["vendor"] + d["pc"], d["ods"]))
+
+# auto-commit + push to GitHub so the hosted page updates
+import subprocess, datetime
+R = os.path.dirname(OUT)
+try:
+    subprocess.run(["git", "-C", R, "add", "-A"], check=False)
+    msg = "Update farm log " + datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+    subprocess.run(["git", "-C", R, "-c", "user.name=buzzimij",
+                    "-c", "user.email=michaeljbuzzi@gmail.com", "commit", "-m", msg], check=False)
+    subprocess.run(["git", "-C", R, "push"], check=False)
+    print("pushed to GitHub (buzzimij/eq-farm-log)")
+except Exception as e:
+    print("git push skipped:", e)
