@@ -1,7 +1,6 @@
 import os, re
 LOGDIR = r"C:/Users/Public/Daybreak Game Company/Installed Games/EverQuest/Logs"
 OUT = r"C:/Users/Dercius/Desktop/EQFarmLog/index.html"
-DAYS = [("22", "Jul 22"), ("23", "Jul 23"), ("24", "Jul 24")]
 TOONS = ["Zedus", "Dercius", "Emia", "Hoggly"]
 VENDOR_TOONS = ["Hogga", "Shoppe"]      # NPC-vendor sellers
 PC_TOONS = ["Discover", "Shoppe"]       # player-trade sellers (Shoppe treated like Discover too)
@@ -18,8 +17,26 @@ def readlines(name):
     return raw.decode("latin-1").split("\n")
 
 
+MONTH_ORD = {m: i for i, m in enumerate(
+    ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"], 1)}
+CUR = {"mo": "Jul", "yr": "2026"}
+
+
 def day_ok(line, dd):
-    return len(line) > 25 and line[5:8] == "Jul" and line[9:11] == dd and line[21:25] == "2026"
+    return len(line) > 25 and line[5:8] == CUR["mo"] and line[9:11] == dd and line[21:25] == CUR["yr"]
+
+
+def detect_days():
+    seen = {}
+    for l in readlines("Zedus"):
+        if len(l) < 25:
+            continue
+        mo, dd, yr = l[5:8], l[9:11], l[21:25]
+        if mo in MONTH_ORD and yr.isdigit() and "slain" in l:
+            seen[(yr, mo, dd)] = seen.get((yr, mo, dd), 0) + 1
+    days = [k for k, c in seen.items() if c > 20]  # only days with real farming (>20 kills)
+    days.sort(key=lambda k: (int(k[0]), MONTH_ORD[k[1]], int(k[2])))
+    return [(mo, dd, yr, "%s %d" % (mo, int(dd))) for (yr, mo, dd) in days]
 
 
 def secs(line):
@@ -63,7 +80,8 @@ def detect_pet(dd):
     return [n for n, c in cnt.items() if c > 20]
 
 
-def parse_day(dd):
+def parse_day(mo, dd, yr):
+    CUR["mo"] = mo; CUR["yr"] = yr
     d = {"toons": {}}
     pets = detect_pet(dd)
     for t in ["Zedus", "Dercius", "Emia"]:
@@ -175,7 +193,8 @@ def parse_day(dd):
     return d
 
 
-data = [(lbl, parse_day(dd)) for dd, lbl in DAYS]
+DAYS = detect_days()
+data = [(lbl, parse_day(mo, dd, yr)) for mo, dd, yr, lbl in DAYS]
 
 
 def pp(x):
