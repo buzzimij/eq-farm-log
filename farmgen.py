@@ -266,6 +266,7 @@ CSS = """
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--txt);font:15px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;padding:24px}
 h1{font-size:24px;margin:0 0 4px}.sub{color:var(--dim);margin-bottom:16px}
 .nav{margin-bottom:24px}.nav a{display:inline-block;color:var(--acc);text-decoration:none;border:1px solid var(--line);padding:7px 13px;border-radius:7px;font-size:14px;background:var(--card)}.nav a:hover{background:#20262f;border-color:var(--acc)}
+.rbtn{background:var(--grn);color:#0e1117;border:none;padding:8px 15px;border-radius:7px;font-size:14px;font-weight:700;cursor:pointer;margin-left:10px}.rbtn:hover{filter:brightness(1.08)}.rbtn:disabled{opacity:.6;cursor:wait}
 .wrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px;margin-bottom:28px}
 table{border-collapse:collapse;width:100%;min-width:1050px;font-variant-numeric:tabular-nums}
 th,td{padding:9px 11px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
@@ -296,10 +297,18 @@ html = ("<!doctype html><html><head><meta charset='utf-8'>"
         "<title>Sebilis Farm Log</title><style>%s</style></head><body>"
         "<h1>\U0001F438 Sebilis Farm Log</h1>"
         "<div class='sub'>Frostreaver TLP · ABC camp · comparable daily stats</div>"
-        "<div class='nav'><a href='eq-bard-guide-tov.html'>\U0001F3B5 Bard — Temple of Veeshan Guide &rarr;</a></div>"
+        "<div class='nav'><a href='eq-bard-guide-tov.html'>\U0001F3B5 Bard — Temple of Veeshan Guide &rarr;</a>"
+        "<button id='refresh' class='rbtn' onclick='doRefresh()'>\U0001F504 Refresh Data</button></div>"
         "<div class='wrap'><table>%s<tbody>%s</tbody></table></div>"
         "<div class='grid'>%s</div>"
         "<div class='foot'>Generated from EQ logs · vendor = Hogga+Shoppe · PC sales = Discover+Shoppe · re-run farmgen.py to update.</div>"
+        "<script>"
+        "function doRefresh(){var b=document.getElementById('refresh');b.textContent='Refreshing... (~2 min)';b.disabled=true;"
+        "fetch('/refresh').then(function(r){return r.text();}).then(function(){location.reload();})"
+        ".catch(function(){b.textContent='\U0001F504 Refresh Data';b.disabled=false;"
+        "alert('The Refresh button only works when the page is opened via start.bat (the local server) - not on the GitHub-hosted version.');});}"
+        "var h=location.hostname;if(h!=='localhost'&&h!=='127.0.0.1'){var el=document.getElementById('refresh');if(el)el.style.display='none';}"
+        "</script>"
         "</body></html>") % (CSS, HEAD, rows, detail)
 
 os.makedirs(os.path.dirname(OUT), exist_ok=True)
