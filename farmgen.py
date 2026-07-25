@@ -3,7 +3,10 @@ LOGDIR = r"C:/Users/Public/Daybreak Game Company/Installed Games/EverQuest/Logs"
 OUT = r"C:/Users/Dercius/Desktop/EQFarmLog/index.html"
 DAYS = [("22", "Jul 22"), ("23", "Jul 23"), ("24", "Jul 24")]
 TOONS = ["Zedus", "Dercius", "Emia", "Hoggly"]
-GROUP = set(["Zedus", "Dercius", "Emia", "Hoggly", "Thrice", "Loriex", "Hogga", "Discover", "Froggy"])
+VENDOR_TOONS = ["Hogga", "Shoppe"]      # NPC-vendor sellers
+PC_TOONS = ["Discover", "Shoppe"]       # player-trade sellers (Shoppe treated like Discover too)
+GROUP = set(["Zedus", "Dercius", "Emia", "Hoggly", "Thrice", "Loriex", "Hogga", "Discover", "Shoppe", "Froggy"])
+COINWORDS = ("platinum", "gold", "silver", "copper")
 
 
 def readlines(name):
@@ -35,6 +38,10 @@ re_plat = re.compile(r"(\d+) platinum")
 re_gold = re.compile(r"(\d+) gold")
 re_sil = re.compile(r"(\d+) silver")
 re_cop = re.compile(r"(\d+) copper")
+re_off = re.compile(r"([A-Za-z]+) has offered you ([0-9,]+) platinum")
+re_gave = re.compile(r"You offered \d+ (.+?) to ([A-Za-z]+)\.")
+re_comp = re.compile(r"You complete the trade with ([A-Za-z]+)")
+re_canc = re.compile(r"([A-Za-z]+) has cancelled the trade")
 
 
 def coinval(line):
@@ -76,10 +83,10 @@ def parse_day(dd):
                 td["total"] += n; continue
             m = re_spec.search(l)
             if m:
-                n = int(m.group(1)); td["spec"] += n; td["total"] += n; continue
+                td["spec"] += int(m.group(1)); td["total"] += int(m.group(1)); continue
             m = re_dot.search(l)
             if m:
-                n = int(m.group(1)); td["dot"] += n; td["total"] += n; continue
+                td["dot"] += int(m.group(1)); td["total"] += int(m.group(1)); continue
             m = re_proc.search(l)
             if m:
                 n = int(m.group(1)); pr = m.group(2)
@@ -89,41 +96,58 @@ def parse_day(dd):
     if pets:
         petre = re.compile(r"\] (?:%s) .* for (\d+) point" % ("|".join(pets)))
         for l in readlines("Hoggly"):
-            if not day_ok(l, dd):
-                continue
-            m = petre.search(l)
-            if m:
-                petdmg += int(m.group(1))
+            if day_ok(l, dd):
+                m = petre.search(l)
+                if m:
+                    petdmg += int(m.group(1))
     d["pet"] = petdmg
     d["petname"] = ", ".join(pets) if pets else "-"
+    # coin
     coin = 0.0
     for t in TOONS:
         for l in readlines(t):
             if day_ok(l, dd) and re_coin.search(l):
                 coin += coinval(l)
     d["coin"] = coin
-    vend = 0.0
-    for l in readlines("Hogga"):
-        if day_ok(l, dd) and " for the " in l and "You receive" in l:
-            vend += coinval(l)
-    d["vendor"] = vend
-    pend = {}; pc = 0.0; pcn = 0
-    off = re.compile(r"([A-Za-z]+) has offered you ([0-9,]+) platinum")
-    comp = re.compile(r"You complete the trade with ([A-Za-z]+)")
-    canc = re.compile(r"([A-Za-z]+) has cancelled the trade")
-    for l in readlines("Discover"):
-        if not day_ok(l, dd):
-            continue
-        m = off.search(l)
-        if m:
-            pend[m.group(1)] = float(m.group(2).replace(",", ""))
-        m = comp.search(l)
-        if m and pend.get(m.group(1), 0) > 0:
-            pc += pend[m.group(1)]; pcn += 1; pend[m.group(1)] = 0
-        m = canc.search(l)
-        if m:
-            pend[m.group(1)] = 0
-    d["pc"] = pc; d["pcn"] = pcn
+    # vendor sales (Hogga + Shoppe) with per-item breakdown
+    vitems = {}
+    vtot = 0.0
+    for t in VENDOR_TOONS:
+        for l in readlines(t):
+            if day_ok(l, dd) and " for the " in l and "You receive" in l:
+                val = coinval(l)
+                item = l.split(" for the ", 1)[1].strip()
+                item = item.replace("(s).", "").replace("(s)", "").rstrip(".").strip()
+                e = vitems.setdefault(item, [0, 0.0])
+                e[0] += 1; e[1] += val; vtot += val
+    d["vendor"] = vtot
+    d["vitems"] = sorted(vitems.items(), key=lambda x: -x[1][1])
+    # PC sales (Discover + Shoppe) with per-item breakdown
+    pitems = []; ptot = 0.0; pcn = 0
+    for t in PC_TOONS:
+        pend_item = {}; pend_plat = {}
+        for l in readlines(t):
+            if not day_ok(l, dd):
+                continue
+            m = re_gave.search(l)
+            if m and m.group(1) not in COINWORDS:
+                pend_item.setdefault(m.group(2), []).append(m.group(1))
+            m = re_off.search(l)
+            if m:
+                pend_plat[m.group(1)] = float(m.group(2).replace(",", ""))
+            m = re_comp.search(l)
+            if m:
+                p = m.group(1); plat = pend_plat.get(p, 0)
+                if plat > 0:
+                    itm = ", ".join(pend_item.get(p, [])) or "(item)"
+                    pitems.append((itm, plat, p)); ptot += plat; pcn += 1
+                pend_plat[p] = 0; pend_item[p] = []
+            m = re_canc.search(l)
+            if m:
+                pend_plat[m.group(1)] = 0; pend_item[m.group(1)] = []
+    d["pc"] = ptot; d["pcn"] = pcn
+    d["pitems"] = sorted(pitems, key=lambda x: -x[1])
+    # kills + froglok + span
     petfirst = d["petname"].split(",")[0].strip() if d["petname"] != "-" else "Xonaner"
     killre = re.compile(r"(was|has been) slain by (Dercius|Emia|Hoggly|%s|Gekn)[!.]" % re.escape(petfirst))
     frogre = re.compile(r"Froggy (was|has been) slain")
@@ -131,11 +155,7 @@ def parse_day(dd):
     for l in readlines("Zedus"):
         if not day_ok(l, dd):
             continue
-        iskill = False
-        if "You have slain " in l:
-            iskill = True
-        elif killre.search(l):
-            iskill = True
+        iskill = "You have slain " in l or killre.search(l)
         if iskill:
             k += 1; s = secs(l)
             if f is None or s < f:
@@ -147,7 +167,7 @@ def parse_day(dd):
     d["kills"] = k; d["frok"] = frk
     d["hours"] = (l2 - f) / 3600.0 if f is not None else 0.0001
     ods = 0
-    for t in TOONS + ["Hogga", "Discover"]:
+    for t in TOONS + VENDOR_TOONS + ["Discover"]:
         for l in readlines(t):
             if day_ok(l, dd) and "Death Shroud" in l and "You have looted" in l:
                 ods += 1
@@ -198,6 +218,12 @@ for lbl, d in data:
             parts.append("%s %s" % (k2, pp(v2)))
         return "<div class='tb'><b>%s</b> — %s <span class='sh'>(%.1f%%)</span><br><span class='mv'>%s</span></div>" % (
             t, pp(td["total"]), sh, " · ".join(parts))
+
+    vlist = "".join("<li><span>%s <em>x%d</em></span><span class='amt'>%s</span></li>" % (it, c[0], pp(c[1]))
+                    for it, c in d["vitems"]) or "<li class='none'>none</li>"
+    plist = "".join("<li><span>%s</span><span class='amt'>%s <em>%s</em></span></li>" % (it, pp(plat), who)
+                    for it, plat, who in d["pitems"]) or "<li class='none'>none</li>"
+
     detail += ("<div class='card'><h3>%s 2026</h3>"
                "<div class='kv'><span>Mobs</span><b>%s</b><span>(%s froglok)</span></div>"
                "<div class='kv'><span>Hours</span><b>%.1f</b><span>%.0f/hr</span></div>"
@@ -205,17 +231,22 @@ for lbl, d in data:
                "<div class='kv'><span>Plat</span><b>%s</b><span>%s/hr</span></div>"
                "<div class='kv'><span>ODS</span><b class='%s'>%d</b></div>"
                "%s%s%s"
-               "<div class='tb'><b>Pet (%s)</b> — %s</div>"
-               "<div class='plat'><span>Coin %s</span><span>Vendor %s</span><span>PC sales %s (%d)</span></div></div>") % (
+               "<div class='tb'><b>Pet (%s)</b> — %s <span class='sh'>(%.1f%%)</span></div>"
+               "<div class='plat'><span>Coin %s</span><span>Vendor %s</span><span>PC sales %s (%d)</span></div>"
+               "<details class='det'><summary>Vendored items (%s pp)</summary><ul class='il'>%s</ul></details>"
+               "<details class='det'><summary>PC sales (%s pp)</summary><ul class='il'>%s</ul></details>"
+               "</div>") % (
         lbl, fmt(d["kills"]), fmt(d["frok"]), d["hours"], d["kills"] / d["hours"], pp(tot_dmg),
         pp(tp), pp(tp / d["hours"]), "ods1" if d["ods"] else "ods0", d["ods"],
         toonblock("Emia"), toonblock("Dercius"), toonblock("Zedus"),
-        d["petname"], pp(d["pet"]), pp(d["coin"]), pp(d["vendor"]), pp(d["pc"]), d["pcn"])
+        d["petname"], pp(d["pet"]), (d["pet"] / tot_dmg * 100 if tot_dmg else 0), pp(d["coin"]), pp(d["vendor"]), pp(d["pc"]), d["pcn"],
+        pp(d["vendor"]), vlist, pp(d["pc"]), plist)
 
 CSS = """
 :root{--bg:#12151c;--card:#1b2029;--line:#2b3240;--txt:#e6e9ef;--dim:#8b93a3;--acc:#5fb0ff;--gold:#e8b64c;--grn:#5fd07a;--red:#e06b6b}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--txt);font:15px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;padding:24px}
-h1{font-size:24px;margin:0 0 4px}.sub{color:var(--dim);margin-bottom:24px}
+h1{font-size:24px;margin:0 0 4px}.sub{color:var(--dim);margin-bottom:16px}
+.nav{margin-bottom:24px}.nav a{display:inline-block;color:var(--acc);text-decoration:none;border:1px solid var(--line);padding:7px 13px;border-radius:7px;font-size:14px;background:var(--card)}.nav a:hover{background:#20262f;border-color:var(--acc)}
 .wrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px;margin-bottom:28px}
 table{border-collapse:collapse;width:100%;min-width:1050px;font-variant-numeric:tabular-nums}
 th,td{padding:9px 11px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
@@ -223,13 +254,17 @@ th{background:#0e1117;color:var(--dim);font-weight:600;font-size:12px;text-trans
 td.day,th:first-child{text-align:left;font-weight:700;color:var(--acc)}
 td.tp{font-weight:700;color:var(--gold)}.ods1{color:var(--grn);font-weight:700}.ods0{color:var(--red)}
 tr:hover td{background:#20262f}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px}
 .card h3{margin:0 0 12px;color:var(--acc);font-size:17px}
 .kv{display:flex;gap:8px;align-items:baseline;margin:3px 0}.kv>span:first-child{color:var(--dim);width:70px;font-size:13px}.kv b{font-size:16px}.kv span:last-child{color:var(--dim);font-size:13px}
 .tb{margin:9px 0;padding-top:9px;border-top:1px solid var(--line)}.tb .sh{color:var(--dim);font-size:13px}.mv{color:var(--dim);font-size:12.5px}
 .plat{margin-top:12px;padding-top:10px;border-top:1px solid var(--line);display:flex;gap:14px;flex-wrap:wrap;color:var(--dim);font-size:13px}
-.nav{margin-bottom:24px}.nav a{display:inline-block;color:var(--acc);text-decoration:none;border:1px solid var(--line);padding:7px 13px;border-radius:7px;font-size:14px;background:var(--card)}.nav a:hover{background:#20262f;border-color:var(--acc)}
+.det{margin-top:10px;border-top:1px solid var(--line);padding-top:8px}.det summary{cursor:pointer;color:var(--gold);font-size:13px;font-weight:600}
+.il{list-style:none;margin:8px 0 0;padding:0;max-height:260px;overflow-y:auto;font-variant-numeric:tabular-nums}
+.il li{display:flex;justify-content:space-between;gap:10px;padding:3px 0;font-size:13px;border-bottom:1px solid #232a34}
+.il li span:first-child{color:var(--txt)}.il em{color:var(--dim);font-style:normal;font-size:12px}
+.il .amt{color:var(--gold);white-space:nowrap}.il .none{color:var(--dim);justify-content:flex-start}
 .foot{color:var(--dim);font-size:12px;margin-top:24px}
 """
 
@@ -245,7 +280,7 @@ html = ("<!doctype html><html><head><meta charset='utf-8'>"
         "<div class='nav'><a href='eq-bard-guide-tov.html'>\U0001F3B5 Bard — Temple of Veeshan Guide &rarr;</a></div>"
         "<div class='wrap'><table>%s<tbody>%s</tbody></table></div>"
         "<div class='grid'>%s</div>"
-        "<div class='foot'>Generated from EQ logs · re-run farmgen.py to add new days.</div>"
+        "<div class='foot'>Generated from EQ logs · vendor = Hogga+Shoppe · PC sales = Discover+Shoppe · re-run farmgen.py to update.</div>"
         "</body></html>") % (CSS, HEAD, rows, detail)
 
 os.makedirs(os.path.dirname(OUT), exist_ok=True)
@@ -253,8 +288,9 @@ with open(OUT, "w", encoding="utf-8") as f:
     f.write(html)
 print("wrote", OUT, "(%d bytes)" % len(html))
 for lbl, d in data:
-    print("  %s: kills=%d frog=%d hrs=%.1f plat=%.0f ods=%d" % (
-        lbl, d["kills"], d["frok"], d["hours"], d["coin"] + d["vendor"] + d["pc"], d["ods"]))
+    print("  %s: kills=%d plat=%.0f (coin %.0f / vend %.0f [%d items] / pc %.0f [%d trades]) ods=%d" % (
+        lbl, d["kills"], d["coin"] + d["vendor"] + d["pc"], d["coin"], d["vendor"], len(d["vitems"]),
+        d["pc"], d["pcn"], d["ods"]))
 
 # auto-commit + push to GitHub so the hosted page updates
 import subprocess, datetime
