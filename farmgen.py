@@ -229,6 +229,7 @@ tr:hover td{background:#20262f}
 .kv{display:flex;gap:8px;align-items:baseline;margin:3px 0}.kv>span:first-child{color:var(--dim);width:70px;font-size:13px}.kv b{font-size:16px}.kv span:last-child{color:var(--dim);font-size:13px}
 .tb{margin:9px 0;padding-top:9px;border-top:1px solid var(--line)}.tb .sh{color:var(--dim);font-size:13px}.mv{color:var(--dim);font-size:12.5px}
 .plat{margin-top:12px;padding-top:10px;border-top:1px solid var(--line);display:flex;gap:14px;flex-wrap:wrap;color:var(--dim);font-size:13px}
+.nav{margin-bottom:24px}.nav a{display:inline-block;color:var(--acc);text-decoration:none;border:1px solid var(--line);padding:7px 13px;border-radius:7px;font-size:14px;background:var(--card)}.nav a:hover{background:#20262f;border-color:var(--acc)}
 .foot{color:var(--dim);font-size:12px;margin-top:24px}
 """
 
@@ -241,6 +242,7 @@ html = ("<!doctype html><html><head><meta charset='utf-8'>"
         "<title>Sebilis Farm Log</title><style>%s</style></head><body>"
         "<h1>\U0001F438 Sebilis Farm Log</h1>"
         "<div class='sub'>Frostreaver TLP · ABC camp · comparable daily stats</div>"
+        "<div class='nav'><a href='eq-bard-guide-tov.html'>\U0001F3B5 Bard — Temple of Veeshan Guide &rarr;</a></div>"
         "<div class='wrap'><table>%s<tbody>%s</tbody></table></div>"
         "<div class='grid'>%s</div>"
         "<div class='foot'>Generated from EQ logs · re-run farmgen.py to add new days.</div>"
